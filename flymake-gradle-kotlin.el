@@ -1,4 +1,4 @@
-;;; flymake-nasm.el --- A flymake handler gradle kotlin projects -*- lexical-binding: t; -*-
+;;; flymake-gradle-kotlin.el --- A flymake handler gradle kotlin projects -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2021  Jürgen Hötzel
 
