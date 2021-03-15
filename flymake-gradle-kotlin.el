@@ -6,7 +6,7 @@
 ;; URL: http://github.com/juergenhoetzel/flymake-gradle-kotlin
 ;; Maintainer: Jürgen Hötzel
 ;; Keywords: tools, languages
-;; Package-Requires: ((flymake-quickdef "1.0.0") (emacs "26.1"))
+;; Package-Requires: ((emacs "26.1"))
 ;; Version: 1.0.0
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,6 @@
 
 ;;; Code:
 
-(require 'flymake-quickdef)
 
 (defgroup flymake-gradle-kotlin nil "flymake-gradle-kotlin preferences." :group 'flymake-gradle-kotlin)
 
@@ -37,27 +36,59 @@
   :type 'string
   :group 'flymake-gradle-kotlin)
 
-(flymake-quickdef-backend flymake-gradle-kotlin-backend
-  :pre-let ((gradle-kotlin-exec (executable-find flymake-gradle-kotlin-executable))
-	    (project-directory (expand-file-name (locate-dominating-file default-directory "build.gradle"))))
-  :pre-check (unless gradle-kotlin-exec (error "Not found gradle-kotlin on PATH"))
-  :write-type 'file
-  :proc-form `(,gradle-kotlin-exec  "-p" ,project-directory "compileKotlin")
-  :search-regexp "^\\(.\\): \\([^:]*\\): (\\([0-9]+\\), \\([0-9]+\\)): \\(.*\\)$"
-  :prep-diagnostic
-  (let* ((lnum (string-to-number (match-string 3)))
-	 (col (string-to-number (match-string 4)))
-	 (severity (match-string 1))
-	 (msg (match-string 5))
-	 (file (match-string 2))
-	 (pos (flymake-diag-region fmqd-source lnum col))
-	 (beg (car pos))
-	 (end (cdr pos))
-	 (type (cond
-		((string= severity "e") :error)
-		((string= severity "w") :warning)
-		(t :note))))
-    (list fmqd-source beg end type msg)))
+(defvar-local flymake-gradle-kotlin--proc nil
+  "A buffer-local variable handling the gradle process for flymake.")
+
+(defun flymake-gradle-kotlin--exit-handler (report-fn proc)
+  "Called each time when gradle finished."
+  (let (diags
+	(source (current-buffer))
+	(error-regexp "^\\(.\\): \\([^:]*\\): (\\([0-9]+\\), \\([0-9]+\\)): \\(.*\\)$"))
+    (with-current-buffer (process-buffer proc)
+      (goto-char (point-min))
+      (while (not (eobp))
+	(when (looking-at error-regexp)
+	  (let* ((lnum (string-to-number (match-string 3)))
+		 (col (string-to-number (match-string 4)))
+		 (severity (match-string 1))
+		 (msg (match-string 5))
+		 (file (match-string 2))
+		 (pos (flymake-diag-region source lnum col))
+		 (type (cond
+			((string= severity "e") :error)
+			((string= severity "w") :warning)
+			(t :note))))
+	    (push (flymake-make-diagnostic source (car pos) (cdr pos) type msg)
+		  diags)))
+	(forward-line 1))
+      (funcall report-fn diags)
+      (kill-buffer (process-buffer proc)))))
+
+(defun flymake-gradle-kotlin-backend (report-fn &rest _args)
+  "Run flymake-gradle-kotlin checker.
+
+REPORT-FN is flymake's callback function."
+  (let* ((gradle-kotlin-exec (executable-find flymake-gradle-kotlin-executable))
+	 (project-directory (expand-file-name (locate-dominating-file default-directory "build.gradle")))
+	 diags)
+    (unless gradle-kotlin-exec (error "Not found gradle-kotlin on PATH"))
+    (when (process-live-p flymake-gradle-kotlin--proc)
+      (kill-process flymake-gradle-kotlin--proc))
+    (if (not (buffer-modified-p))
+	(save-restriction
+	  (widen)
+	  (setq
+	   flymake-gradle-kotlin--proc
+	   (make-process
+            :name "flymake-gradle-kotlin" :noquery t :connection-type 'pipe
+            :buffer (generate-new-buffer " *flymake-gradle-kotlin*")
+            :command `(,gradle-kotlin-exec  "-p" ,project-directory "compileKotlin")
+            :sentinel (lambda (proc _event)
+			(when (eq 'exit (process-status proc))
+			  (flymake-gradle-kotlin--exit-handler report-fn proc))))))
+      (funcall report-fn nil)
+      (flymake-log :warning "Can't flycheck unsaved kotlin files"))))
+
 
 ;;;###autoload
 (defun flymake-gradle-kotlin-setup ()
