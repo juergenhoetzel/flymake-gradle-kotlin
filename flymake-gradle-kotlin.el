@@ -41,29 +41,9 @@
 
 (defun flymake-gradle-kotlin--exit-handler (report-fn proc)
   "Called each time when gradle finished."
-  (let (diags
-	(source (current-buffer))
-	(error-regexp "^\\(.\\): \\([^:]*\\): (\\([0-9]+\\), \\([0-9]+\\)): \\(.*\\)$"))
-    (with-current-buffer (process-buffer proc)
-      (goto-char (point-min))
-      (while (not (eobp))
-	(when (looking-at error-regexp)
-	  (let* ((lnum (string-to-number (match-string 3)))
-		 (col (string-to-number (match-string 4)))
-		 (severity (match-string 1))
-		 (msg (match-string 5))
-		 (file (match-string 2))
-		 (pos (flymake-diag-region source lnum col))
-		 (type (cond
-			((string= severity "e") :error)
-			((string= severity "w") :warning)
-			(t :note))))
-	    (when (equal file (buffer-file-name source))
-	      (push (flymake-make-diagnostic source (car pos) (cdr pos) type msg)
-		    diags))))
-	(forward-line 1))
-      (funcall report-fn diags)
-      (kill-buffer (process-buffer proc)))))
+  )
+
+(defconst flymake-gradle-kotlin--error-regexp  "^\\(.\\): \\([^:]*\\): (\\([0-9]+\\), \\([0-9]+\\)): \\(.*\\)$")
 
 (defun flymake-gradle-kotlin-backend (report-fn &rest _args)
   "Run flymake-gradle-kotlin checker.
@@ -71,6 +51,7 @@
 REPORT-FN is flymake's callback function."
   (let* ((gradle-kotlin-exec (executable-find flymake-gradle-kotlin-executable))
 	 (project-directory (expand-file-name (locate-dominating-file default-directory "build.gradle")))
+	 (source (current-buffer))
 	 diags)
     (unless gradle-kotlin-exec (error "Not found gradle-kotlin on PATH"))
     (when (process-live-p flymake-gradle-kotlin--proc)
@@ -86,7 +67,26 @@ REPORT-FN is flymake's callback function."
             :command `(,gradle-kotlin-exec  "-p" ,project-directory "compileKotlin")
             :sentinel (lambda (proc _event)
 			(when (eq 'exit (process-status proc))
-			  (flymake-gradle-kotlin--exit-handler report-fn proc))))))
+			  (with-current-buffer (process-buffer proc)
+			    (goto-char (point-min))
+			    (while (not (eobp))
+			      (when (looking-at flymake-gradle-kotlin--error-regexp)
+				(let* ((lnum (string-to-number (match-string 3)))
+				       (col (string-to-number (match-string 4)))
+				       (severity (match-string 1))
+				       (msg (match-string 5))
+				       (file (match-string 2))
+				       (pos (flymake-diag-region source lnum col))
+				       (type (cond
+					      ((string= severity "e") :error)
+					      ((string= severity "w") :warning)
+					      (t :note))))
+				  (when (equal file (buffer-file-name source))
+				    (push (flymake-make-diagnostic source (car pos) (cdr pos) type msg)
+					  diags))))
+			      (forward-line 1)))
+			  (funcall report-fn diags)
+			  (kill-buffer (process-buffer proc)))))))
       (funcall report-fn nil)
       (flymake-log :warning "Can't flycheck unsaved kotlin files"))))
 
