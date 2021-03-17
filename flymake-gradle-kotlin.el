@@ -54,6 +54,7 @@ REPORT-FN is flymake's callback function."
 	 (source (current-buffer))
 	 diags)
     (unless gradle-kotlin-exec (error "Not found gradle-kotlin on PATH"))
+    (unless project-directory (error "Not a gradle project"))
     (when (process-live-p flymake-gradle-kotlin--proc)
       (kill-process flymake-gradle-kotlin--proc))
     (if (not (buffer-modified-p))
