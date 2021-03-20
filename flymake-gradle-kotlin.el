@@ -50,7 +50,9 @@
 
 REPORT-FN is flymake's callback function."
   (let* ((gradle-kotlin-exec (executable-find flymake-gradle-kotlin-executable))
-	 (project-directory (expand-file-name (locate-dominating-file default-directory "build.gradle")))
+	 (project-directory (expand-file-name
+			     (or (locate-dominating-file default-directory "build.gradle")
+				 (locate-dominating-file default-directory "build.gradle.kts"))))
 	 (source (current-buffer))
 	 diags)
     (unless gradle-kotlin-exec (error "Not found gradle-kotlin on PATH"))
