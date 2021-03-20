@@ -39,10 +39,6 @@
 (defvar-local flymake-gradle-kotlin--proc nil
   "A buffer-local variable handling the gradle process for flymake.")
 
-(defun flymake-gradle-kotlin--exit-handler (report-fn proc)
-  "Called each time when gradle finished."
-  )
-
 (defconst flymake-gradle-kotlin--error-regexp  "^\\(.\\): \\([^:]*\\): (\\([0-9]+\\), \\([0-9]+\\)): \\(.*\\)$")
 
 (defun flymake-gradle-kotlin-backend (report-fn &rest _args)
