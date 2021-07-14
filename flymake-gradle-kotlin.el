@@ -80,7 +80,7 @@ REPORT-FN is flymake's callback function."
 					      ((string= severity "e") :error)
 					      ((string= severity "w") :warning)
 					      (t :note))))
-				  (when (equal file (buffer-file-name source))
+				  (when (equal file (file-truename (buffer-file-name source)))
 				    (push (flymake-make-diagnostic source (car pos) (cdr pos) type msg)
 					  diags))))
 			      (forward-line 1)))
